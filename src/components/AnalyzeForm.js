@@ -63,6 +63,29 @@ export default function AnalyzeForm() {
     }
   };
 
+  const loadLatestNews = async () => {
+    setLoading(true);
+    setError('');
+    setResult(null);
+    try {
+      const response = await fetch('/api/news?category=general');
+      const data = await response.json();
+      if (data.success && data.articles && data.articles.length > 0) {
+        // Pick a random article from the top 5 to make it interesting
+        const max = Math.min(5, data.articles.length);
+        const randomArticle = data.articles[Math.floor(Math.random() * max)];
+        setTitle(randomArticle.title);
+        setText(randomArticle.content || randomArticle.description || '');
+      } else {
+        setError('Could not fetch live news. Try again.');
+      }
+    } catch (err) {
+      setError('Failed to fetch live news.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <section id="analyze" className="analyze-section">
       <div className="section-header">
@@ -115,10 +138,19 @@ export default function AnalyzeForm() {
           </button>
           
           <div className="example-btns">
-            <button type="button" className="example-btn real" onClick={() => loadExample('real')}>
+            <button 
+              type="button" 
+              className="example-btn auto" 
+              onClick={loadLatestNews} 
+              style={{ background: 'linear-gradient(90deg, #7b2ff7, #00d4ff)', border: 'none', color: '#fff', fontWeight: 'bold' }}
+              disabled={loading}
+            >
+              ✨ Load Trending News
+            </button>
+            <button type="button" className="example-btn real" onClick={() => loadExample('real')} disabled={loading}>
               Load Real Example
             </button>
-            <button type="button" className="example-btn fake" onClick={() => loadExample('fake')}>
+            <button type="button" className="example-btn fake" onClick={() => loadExample('fake')} disabled={loading}>
               Load Fake Example
             </button>
           </div>

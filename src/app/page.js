@@ -5,7 +5,7 @@ import Header from '@/components/Header';
 import StatsCard from '@/components/StatsCard';
 import NewsCard from '@/components/NewsCard';
 import AnalyzeForm from '@/components/AnalyzeForm';
-import { DistributionPieChart, CategoryBarChart, ScoreDistributionChart, SourceCredibilityChart, SentimentChart } from '@/components/Charts';
+import { DistributionPieChart, CategoryBarChart, ScoreDistributionChart, SourceCredibilityChart, SentimentChart, UnifiedInsightsChart } from '@/components/Charts';
 import { computeStats } from '@/lib/stats';
 export default function Home() {
   const [articles, setArticles] = useState([]);
@@ -17,11 +17,41 @@ export default function Home() {
   const [activeSources, setActiveSources] = useState([]);
   const [filterType, setFilterType] = useState('all');
   const [selectedChannel, setSelectedChannel] = useState('All Sources');
+  const [activeRegion, setActiveRegion] = useState('global');
+  const [activeArea, setActiveArea] = useState('all');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchNews = useCallback(async (category) => {
+  const INDIAN_AREAS = [
+    { id: 'all', name: 'All India' },
+    { id: 'Delhi', name: 'Delhi' },
+    { id: 'Mumbai', name: 'Mumbai' },
+    { id: 'Bangalore', name: 'Bangalore' },
+    { id: 'Kerala', name: 'Kerala' },
+    { id: 'Tamil Nadu', name: 'Tamil Nadu' },
+    { id: 'Uttar Pradesh', name: 'Uttar Pradesh' }
+  ];
+
+  const fetchNews = useCallback(async (category, region = 'global', area = 'all', query = '') => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/news?category=${category}`);
+      let url = `/api/news?category=${category}`;
+      let combinedQuery = query;
+
+      if (region === 'in') {
+        url += `&country=in`;
+        if (area !== 'all') {
+          combinedQuery = combinedQuery ? `${area} ${combinedQuery}` : area;
+        }
+      } else if (region === 'us') {
+        url += `&country=us`;
+      }
+
+      if (combinedQuery) {
+        url += `&query=${encodeURIComponent(combinedQuery)}`;
+      }
+
+      const response = await fetch(url);
       const data = await response.json();
 
       if (data.success) {
@@ -39,8 +69,9 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetchNews(activeCategory);
-  }, [activeCategory, fetchNews]);
+    // eslint-disable-next-line
+    fetchNews(activeCategory, activeRegion, activeArea, searchQuery);
+  }, [activeCategory, activeRegion, activeArea, searchQuery, fetchNews]);
 
   const handleAnalyzeArticle = async (articleIndex) => {
     const articleToAnalyze = articles[articleIndex];
@@ -169,7 +200,7 @@ export default function Home() {
           ) : (
             <div className="empty-state" style={{ padding: '3rem', textAlign: 'center', background: 'rgba(26, 32, 68, 0.4)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
               <span className="empty-icon" style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem' }}>👆</span>
-              <p style={{ color: '#8892b0', fontSize: '1.1rem' }}>No articles analyzed yet. Click "Analyze Article" on any news card below to build your dashboard.</p>
+              <p style={{ color: '#8892b0', fontSize: '1.1rem' }}>No articles analyzed yet. Click &quot;Analyze Article&quot; on any news card below to build your dashboard.</p>
             </div>
           )}
         </section>
@@ -229,10 +260,8 @@ export default function Home() {
 
             {selectedChannel !== 'All Sources' && channelStats ? (
               channelStats.total > 0 ? (
-                <div className="charts-grid" style={{ marginTop: '1.5rem' }}>
-                  <DistributionPieChart stats={channelStats} />
-                  <SentimentChart stats={channelStats} />
-                  <CategoryBarChart stats={channelStats} />
+                <div style={{ marginTop: '1.5rem', display: 'grid', gridTemplateColumns: '1fr' }}>
+                  <UnifiedInsightsChart stats={channelStats} />
                 </div>
               ) : (
                 <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', background: 'rgba(0, 0, 0, 0.2)', borderRadius: '12px' }}>
@@ -257,18 +286,96 @@ export default function Home() {
             <p className="section-subtitle">Browse analyzed articles from multiple news channels</p>
           </div>
 
-          {/* Category Tabs */}
-          <div className="category-tabs">
-            {[{ id: 'general', name: 'All News', icon: '📰' }, ...categories].map(cat => (
-              <button
-                key={cat.id}
-                className={`category-tab ${activeCategory === cat.id ? 'active' : ''}`}
-                onClick={() => setActiveCategory(cat.id)}
-              >
-                <span>{cat.icon}</span>
-                {cat.name}
-              </button>
-            ))}
+          {/* Feed Controls Bar */}
+          <div className="feed-controls" style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '2rem', background: 'rgba(20, 24, 48, 0.6)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)', alignItems: 'center' }}>
+            
+            {/* Category Tabs (Scrollable Row) */}
+            <div style={{ flex: '1 1 auto', display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.2rem' }} className="hide-scrollbar">
+              {[{ id: 'general', name: 'All News', icon: '📰' }, ...categories].map(cat => (
+                <button
+                  key={cat.id}
+                  className={`category-tab ${activeCategory === cat.id ? 'active' : ''}`}
+                  onClick={() => setActiveCategory(cat.id)}
+                  style={{ margin: 0, whiteSpace: 'nowrap', padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+                >
+                  <span style={{ marginRight: '0.4rem' }}>{cat.icon}</span>
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+
+            {/* Region & Area Selectors */}
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <span style={{ fontSize: '0.75rem', color: '#8892b0', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600' }}>Region</span>
+                <select 
+                  value={activeRegion}
+                  onChange={(e) => {
+                    setActiveRegion(e.target.value);
+                    if (e.target.value !== 'in') setActiveArea('all');
+                  }}
+                  style={{
+                    padding: '0.5rem 1rem', background: '#1a2044', color: '#fff',
+                    border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px',
+                    fontSize: '0.9rem', outline: 'none', cursor: 'pointer'
+                  }}
+                >
+                  <option value="global">🌍 Global (All Over)</option>
+                  <option value="in">🇮🇳 India</option>
+                  <option value="us">🇺🇸 United States</option>
+                </select>
+              </div>
+
+              {activeRegion === 'in' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#8892b0', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600' }}>Area Shortlist</span>
+                  <select 
+                    value={activeArea}
+                    onChange={(e) => setActiveArea(e.target.value)}
+                    style={{
+                      padding: '0.5rem 1rem', background: 'linear-gradient(90deg, rgba(123, 47, 247, 0.2), rgba(0, 212, 255, 0.1))', color: '#fff',
+                      border: '1px solid var(--accent)', borderRadius: '8px',
+                      fontSize: '0.9rem', outline: 'none', cursor: 'pointer'
+                    }}
+                  >
+                    {INDIAN_AREAS.map(area => (
+                      <option key={area.id} value={area.id} style={{ background: '#1a2044' }}>{area.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Custom Search Bar */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <span style={{ fontSize: '0.75rem', color: '#8892b0', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600' }}>Search Topics</span>
+                <form 
+                  onSubmit={(e) => { e.preventDefault(); setSearchQuery(searchInput); }}
+                  style={{ display: 'flex', alignItems: 'center' }}
+                >
+                  <input
+                    type="text"
+                    placeholder="Search specific news..."
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    style={{
+                      padding: '0.5rem 1rem', background: '#0a0d1e', color: '#fff',
+                      border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px 0 0 8px',
+                      fontSize: '0.9rem', outline: 'none', width: '200px'
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    style={{
+                      padding: '0.5rem 1rem', background: 'var(--accent)', color: '#fff',
+                      border: 'none', borderRadius: '0 8px 8px 0', cursor: 'pointer',
+                      fontSize: '0.9rem', fontWeight: 'bold'
+                    }}
+                  >
+                    🔍
+                  </button>
+                </form>
+              </div>
+            </div>
           </div>
 
           {/* Filter Buttons */}

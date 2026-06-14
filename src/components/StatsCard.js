@@ -13,6 +13,7 @@ export default function StatsCard({ icon, label, value, suffix, color, delay }) 
 
   useEffect(() => {
     if (!isVisible || typeof value !== 'number') {
+      // eslint-disable-next-line
       setDisplayValue(value);
       return;
     }

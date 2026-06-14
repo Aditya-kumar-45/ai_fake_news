@@ -21,10 +21,18 @@ export function computeStats(articles) {
   analyzedArticles.forEach(article => {
     const cat = article.category || 'general';
     if (!categoryBreakdown[cat]) {
-      categoryBreakdown[cat] = { total: 0, real: 0, fake: 0, suspicious: 0 };
+      categoryBreakdown[cat] = { 
+        total: 0, real: 0, fake: 0, suspicious: 0,
+        sentiment: { Positive: 0, Neutral: 0, Negative: 0 }
+      };
     }
     categoryBreakdown[cat].total++;
     categoryBreakdown[cat][article.analysis.classification.toLowerCase()]++;
+    
+    const tone = article.analysis.breakdown?.sentiment?.tone || 'Neutral';
+    if (tone.includes('Positive')) categoryBreakdown[cat].sentiment.Positive++;
+    else if (tone.includes('Negative')) categoryBreakdown[cat].sentiment.Negative++;
+    else categoryBreakdown[cat].sentiment.Neutral++;
   });
 
   // Source breakdown

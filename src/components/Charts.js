@@ -3,7 +3,7 @@
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, AreaChart, Area, RadarChart,
-  PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
+  PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ComposedChart, Line
 } from 'recharts';
 
 const COLORS = {
@@ -273,6 +273,52 @@ export function SentimentChart({ stats }) {
             formatter={(value) => <span style={{ color: '#b0b8d1', fontSize: '13px' }}>{value}</span>}
           />
         </PieChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+export function UnifiedInsightsChart({ stats }) {
+  const data = Object.entries(stats.categoryBreakdown || {}).map(([category, counts]) => ({
+    name: category.charAt(0).toUpperCase() + category.slice(1),
+    Real: counts.real || 0,
+    Fake: counts.fake || 0,
+    Suspicious: counts.suspicious || 0,
+    Positive: counts.sentiment?.Positive || 0,
+    Neutral: counts.sentiment?.Neutral || 0,
+    Negative: counts.sentiment?.Negative || 0,
+  }));
+
+  const SENTIMENT = {
+    Positive: '#00d4ff', // primary blue
+    Neutral: '#7b2ff7', // secondary purple
+    Negative: '#e91e63' // magenta
+  };
+
+  return (
+    <div className="chart-container" style={{ gridColumn: '1 / -1' }}>
+      <div className="section-header" style={{ marginBottom: '1rem' }}>
+        <h3 className="chart-title" style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>
+          <span className="chart-icon">📊</span>
+          Unified Channel Insights
+        </h3>
+        <p className="section-subtitle" style={{ fontSize: '0.85rem' }}>A side-by-side comparison of Classification and Sentiment across Categories.</p>
+      </div>
+      <ResponsiveContainer width="100%" height={400}>
+        <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1a2044" />
+          <XAxis dataKey="name" tick={{ fill: '#8892b0', fontSize: 12 }} axisLine={{ stroke: '#1a2044' }} />
+          <YAxis tick={{ fill: '#8892b0', fontSize: 12 }} axisLine={{ stroke: '#1a2044' }} allowDecimals={false} />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend formatter={(value) => <span style={{ color: '#b0b8d1', fontSize: '13px' }}>{value}</span>} wrapperStyle={{ paddingTop: '20px' }} />
+          
+          <Bar dataKey="Real" fill={COLORS.real} animationDuration={1200} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Suspicious" fill={COLORS.suspicious} animationDuration={1200} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Fake" fill={COLORS.fake} animationDuration={1200} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Positive" fill={SENTIMENT.Positive} animationDuration={1200} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Neutral" fill={SENTIMENT.Neutral} animationDuration={1200} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Negative" fill={SENTIMENT.Negative} animationDuration={1200} radius={[4, 4, 0, 0]} />
+        </BarChart>
       </ResponsiveContainer>
     </div>
   );

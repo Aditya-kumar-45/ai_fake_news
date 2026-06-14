@@ -6,22 +6,33 @@ import { MOCK_NEWS, NEWS_CATEGORIES } from '@/lib/newsChannels';
 const NEWS_API_KEY = process.env.NEWS_API_KEY;
 const GNEWS_API_KEY = process.env.GNEWS_API_KEY;
 const CURRENTS_API_KEY = process.env.CURRENTS_API_KEY;
+const NEWSDATA_API_KEY = process.env.NEWSDATA_API_KEY;
 
 const NEWS_API_BASE = 'https://newsapi.org/v2';
 const GNEWS_API_BASE = 'https://gnews.io/api/v4';
 const CURRENTS_API_BASE = 'https://api.currentsapi.services/v1';
+const NEWSDATA_API_BASE = 'https://newsdata.io/api/1';
 
 /**
  * Fetch from NewsAPI.org
  */
-async function fetchFromNewsAPI(category) {
+async function fetchFromNewsAPI(category, country, query) {
   if (!NEWS_API_KEY || NEWS_API_KEY === 'your_api_key_here') return [];
 
   try {
-    const response = await fetch(
-      `${NEWS_API_BASE}/top-headlines?category=${category}&language=en&pageSize=20&apiKey=${NEWS_API_KEY}`,
-      { next: { revalidate: 300 } }
-    );
+    let url = '';
+    if (query) {
+      // Use /everything for specific city/area queries to ensure we get results
+      url = `${NEWS_API_BASE}/everything?language=en&pageSize=20&apiKey=${NEWS_API_KEY}`;
+      url += `&q=${encodeURIComponent(query + (country === 'in' ? ' India' : ''))}`;
+    } else {
+      url = `${NEWS_API_BASE}/top-headlines?language=en&pageSize=20&apiKey=${NEWS_API_KEY}`;
+      if (country) url += `&country=${country}`;
+      if (category && category !== 'general') url += `&category=${category}`;
+      else if (!country) url += `&category=general`;
+    }
+
+    const response = await fetch(url, { next: { revalidate: 300 } });
     if (!response.ok) return [];
     const data = await response.json();
     return (data.articles || []).map(article => ({
@@ -45,7 +56,7 @@ async function fetchFromNewsAPI(category) {
 /**
  * Fetch from GNews.io
  */
-async function fetchFromGNews(category) {
+async function fetchFromGNews(category, country, query) {
   if (!GNEWS_API_KEY || GNEWS_API_KEY === 'your_api_key_here') return [];
 
   const categoryMap = {
@@ -56,10 +67,18 @@ async function fetchFromGNews(category) {
 
   try {
     const cat = categoryMap[category] || 'general';
-    const response = await fetch(
-      `${GNEWS_API_BASE}/top-headlines?category=${cat}&lang=en&max=10&apikey=${GNEWS_API_KEY}`,
-      { next: { revalidate: 300 } }
-    );
+    let url = '';
+    if (query) {
+      // Use /search for specific queries
+      url = `${GNEWS_API_BASE}/search?lang=en&max=10&apikey=${GNEWS_API_KEY}`;
+      if (country) url += `&country=${country}`;
+      url += `&q=${encodeURIComponent(query)}`;
+    } else {
+      url = `${GNEWS_API_BASE}/top-headlines?category=${cat}&lang=en&max=10&apikey=${GNEWS_API_KEY}`;
+      if (country) url += `&country=${country}`;
+    }
+
+    const response = await fetch(url, { next: { revalidate: 300 } });
     if (!response.ok) return [];
     const data = await response.json();
     return (data.articles || []).map(article => ({
@@ -83,7 +102,7 @@ async function fetchFromGNews(category) {
 /**
  * Fetch from CurrentsAPI
  */
-async function fetchFromCurrents(category) {
+async function fetchFromCurrents(category, country, query) {
   if (!CURRENTS_API_KEY || CURRENTS_API_KEY === 'your_api_key_here') return [];
 
   const categoryMap = {
@@ -94,10 +113,18 @@ async function fetchFromCurrents(category) {
 
   try {
     const cat = categoryMap[category] || 'general';
-    const response = await fetch(
-      `${CURRENTS_API_BASE}/latest-news?category=${cat}&language=en&apiKey=${CURRENTS_API_KEY}`,
-      { next: { revalidate: 300 } }
-    );
+    let url = '';
+    
+    if (query) {
+      url = `${CURRENTS_API_BASE}/search?language=en&apiKey=${CURRENTS_API_KEY}`;
+      if (country) url += `&country=${country}`;
+      url += `&keywords=${encodeURIComponent(query)}`;
+    } else {
+      url = `${CURRENTS_API_BASE}/latest-news?category=${cat}&language=en&apiKey=${CURRENTS_API_KEY}`;
+      if (country) url += `&country=${country}`;
+    }
+
+    const response = await fetch(url, { next: { revalidate: 300 } });
     if (!response.ok) return [];
     const data = await response.json();
     return (data.news || []).map(article => ({
@@ -114,6 +141,48 @@ async function fetchFromCurrents(category) {
     }));
   } catch (err) {
     console.error('CurrentsAPI error:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Fetch from NewsData.io (Excellent for Indian / Regional News)
+ */
+async function fetchFromNewsData(category, country, query) {
+  if (!NEWSDATA_API_KEY || NEWSDATA_API_KEY === 'your_api_key_here') return [];
+
+  const categoryMap = {
+    general: 'top', technology: 'technology', science: 'science',
+    health: 'health', business: 'business', entertainment: 'entertainment',
+    sports: 'sports'
+  };
+
+  try {
+    const cat = categoryMap[category] || 'top';
+    let url = `${NEWSDATA_API_BASE}/news?apikey=${NEWSDATA_API_KEY}&language=en`;
+    
+    if (country) url += `&country=${country}`;
+    if (query) url += `&q=${encodeURIComponent(query)}`;
+    if (category && category !== 'general') url += `&category=${cat}`;
+
+    const response = await fetch(url, { next: { revalidate: 300 } });
+    if (!response.ok) return [];
+    const data = await response.json();
+    
+    return (data.results || []).map(article => ({
+      title: article.title || '',
+      description: article.description || '',
+      content: article.content || article.description || '',
+      source: article.source_id || 'NewsData.io',
+      author: article.creator ? article.creator[0] : '',
+      url: article.link || '',
+      urlToImage: article.image_url || null,
+      publishedAt: article.pubDate || new Date().toISOString(),
+      category,
+      apiSource: 'NewsData.io'
+    }));
+  } catch (err) {
+    console.error('NewsData error:', err.message);
     return [];
   }
 }
@@ -161,30 +230,46 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category') || 'general';
+    const country = searchParams.get('country') || '';
+    const query = searchParams.get('query') || '';
 
     // Fetch from all configured APIs in parallel
-    const [newsApiArticles, gnewsArticles, currentsArticles] = await Promise.all([
-      fetchFromNewsAPI(category),
-      fetchFromGNews(category),
-      fetchFromCurrents(category)
+    const [newsApiArticles, gnewsArticles, currentsArticles, newsDataArticles] = await Promise.all([
+      fetchFromNewsAPI(category, country, query),
+      fetchFromGNews(category, country, query),
+      fetchFromCurrents(category, country, query),
+      fetchFromNewsData(category, country, query)
     ]);
 
-    let articles = [...newsApiArticles, ...gnewsArticles, ...currentsArticles];
+    let articles = [...newsApiArticles, ...gnewsArticles, ...currentsArticles, ...newsDataArticles];
 
     // Track which APIs returned data
     const activeSources = [];
     if (newsApiArticles.length > 0) activeSources.push('NewsAPI');
     if (gnewsArticles.length > 0) activeSources.push('GNews');
     if (currentsArticles.length > 0) activeSources.push('CurrentsAPI');
+    if (newsDataArticles.length > 0) activeSources.push('NewsData.io');
 
     const usingMockData = articles.length === 0;
 
     // Fallback to mock data if no articles fetched
     if (usingMockData) {
       articles = category === 'general'
-        ? MOCK_NEWS
+        ? [...MOCK_NEWS]
         : MOCK_NEWS.filter(a => a.category === category);
-      if (articles.length === 0) articles = MOCK_NEWS;
+      if (articles.length === 0) articles = [...MOCK_NEWS];
+      
+      // If the user requested a specific area (query), dynamically simulate local news for demo mode
+      if (query) {
+        const areaName = query.charAt(0).toUpperCase() + query.slice(1);
+        articles = articles.slice(0, 4).map(a => ({
+          ...a,
+          title: `[${areaName}] ${a.title}`,
+          description: `Latest updates from ${areaName}: ${a.description}`,
+          content: `Reporting live from ${areaName}. ${a.content}`
+        }));
+      }
+
       articles = articles.map(a => ({ ...a, apiSource: 'Mock' }));
     }
 
