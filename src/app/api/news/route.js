@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { analyzeArticle } from '@/lib/fakeNewsDetector';
+import { computeStats } from '@/lib/stats';
+import { analyzeArticleRuleBased } from '@/lib/fakeNewsDetector';
 import { MOCK_NEWS, NEWS_CATEGORIES } from '@/lib/newsChannels';
 
 const NEWS_API_KEY = process.env.NEWS_API_KEY;
@@ -198,9 +199,9 @@ export async function GET(request) {
     // Cross-reference across sources
     articles = crossReferenceArticles(articles);
 
-    // Analyze each article
+    // Auto-analyze articles locally (fast, no API limits)
     const analyzedArticles = articles.map(article => {
-      const analysis = analyzeArticle(article);
+      const analysis = analyzeArticleRuleBased(article);
 
       // Boost credibility if cross-referenced across multiple sources
       if (article.crossRefSources && article.crossRefSources.length > 0) {
@@ -210,8 +211,10 @@ export async function GET(request) {
         // Recalculate classification after boost
         if (analysis.credibilityScore >= 72) analysis.classification = 'REAL';
         else if (analysis.credibilityScore >= 45) analysis.classification = 'SUSPICIOUS';
+        else analysis.classification = 'FAKE';
 
         if (article.crossRefSources.length >= 2) {
+          analysis.flags = analysis.flags || [];
           analysis.flags.push({
             type: 'info',
             message: `Cross-verified by ${article.crossRefSources.length} independent sources`
@@ -255,67 +258,4 @@ function deduplicateArticles(articles) {
   });
 }
 
-function computeStats(articles) {
-  const total = articles.length;
-  const real = articles.filter(a => a.analysis.classification === 'REAL').length;
-  const fake = articles.filter(a => a.analysis.classification === 'FAKE').length;
-  const suspicious = articles.filter(a => a.analysis.classification === 'SUSPICIOUS').length;
 
-  const avgCredibility = total > 0
-    ? Math.round(articles.reduce((sum, a) => sum + a.analysis.credibilityScore, 0) / total)
-    : 0;
-
-  // Category breakdown
-  const categoryBreakdown = {};
-  articles.forEach(article => {
-    const cat = article.category || 'general';
-    if (!categoryBreakdown[cat]) {
-      categoryBreakdown[cat] = { total: 0, real: 0, fake: 0, suspicious: 0 };
-    }
-    categoryBreakdown[cat].total++;
-    categoryBreakdown[cat][article.analysis.classification.toLowerCase()]++;
-  });
-
-  // Source breakdown
-  const sourceBreakdown = {};
-  articles.forEach(article => {
-    const src = article.source || 'Unknown';
-    if (!sourceBreakdown[src]) {
-      sourceBreakdown[src] = { total: 0, real: 0, fake: 0, suspicious: 0, avgScore: 0, scores: [] };
-    }
-    sourceBreakdown[src].total++;
-    sourceBreakdown[src][article.analysis.classification.toLowerCase()]++;
-    sourceBreakdown[src].scores.push(article.analysis.credibilityScore);
-  });
-
-  Object.keys(sourceBreakdown).forEach(src => {
-    const scores = sourceBreakdown[src].scores;
-    sourceBreakdown[src].avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-    delete sourceBreakdown[src].scores;
-  });
-
-  // Score distribution
-  const scoreDistribution = [
-    { range: '0-20', count: articles.filter(a => a.analysis.credibilityScore <= 20).length, label: 'Very Low' },
-    { range: '21-40', count: articles.filter(a => a.analysis.credibilityScore > 20 && a.analysis.credibilityScore <= 40).length, label: 'Low' },
-    { range: '41-60', count: articles.filter(a => a.analysis.credibilityScore > 40 && a.analysis.credibilityScore <= 60).length, label: 'Medium' },
-    { range: '61-80', count: articles.filter(a => a.analysis.credibilityScore > 60 && a.analysis.credibilityScore <= 80).length, label: 'High' },
-    { range: '81-100', count: articles.filter(a => a.analysis.credibilityScore > 80).length, label: 'Very High' },
-  ];
-
-  // Sentiment distribution (new)
-  const sentimentDist = { Positive: 0, Neutral: 0, Negative: 0 };
-  articles.forEach(a => {
-    const tone = a.analysis.breakdown?.sentiment?.tone || 'Neutral';
-    if (tone.includes('Positive')) sentimentDist.Positive++;
-    else if (tone.includes('Negative')) sentimentDist.Negative++;
-    else sentimentDist.Neutral++;
-  });
-
-  return {
-    total, real, fake, suspicious, avgCredibility,
-    realPercentage: total > 0 ? Math.round((real / total) * 100) : 0,
-    fakePercentage: total > 0 ? Math.round((fake / total) * 100) : 0,
-    categoryBreakdown, sourceBreakdown, scoreDistribution, sentimentDist
-  };
-}

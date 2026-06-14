@@ -24,7 +24,7 @@ export async function POST(request) {
       );
     }
 
-    const analysis = analyzeText(text.trim(), title?.trim() || '');
+    const analysis = await analyzeText(text.trim(), title?.trim() || '');
 
     return NextResponse.json({
       success: true,

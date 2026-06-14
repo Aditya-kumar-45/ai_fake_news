@@ -1,3 +1,5 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
 /**
  * Advanced AI Fake News Detection Engine v2.0
  * 
@@ -94,7 +96,7 @@ const CLICKBAIT_PATTERNS = [
 
 // ==================== MAIN ANALYSIS ====================
 
-export function analyzeArticle(article) {
+export function analyzeArticleRuleBased(article) {
   const title = article.title || '';
   const description = article.description || '';
   const content = article.content || '';
@@ -616,8 +618,8 @@ function analyzeContentQuality(article) {
 
 // ==================== TEXT ANALYSIS EXPORT ====================
 
-export function analyzeText(text, title = '') {
-  return analyzeArticle({
+export async function analyzeText(text, title = '') {
+  return await analyzeArticle({
     title: title || text.substring(0, 100),
     description: text.substring(0, 300),
     content: text,
@@ -625,4 +627,75 @@ export function analyzeText(text, title = '') {
     author: '',
     url: ''
   });
+}
+
+export async function analyzeArticle(article) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'your_api_key_here') {
+    return analyzeArticleRuleBased(article);
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const prompt = `Analyze the following news article for credibility and return a JSON object exactly matching the specified schema.
+
+Title: ${article.title || 'N/A'}
+Source: ${article.source || 'N/A'}
+Content: ${article.content || article.description || 'N/A'}
+
+Evaluate the article based on:
+1. Sentiment Analysis
+2. Bias Detection
+3. Subjectivity Score
+4. Readability Analysis
+5. Propaganda Detection
+6. Headline-Content Alignment
+7. Source Credibility
+8. Content Quality
+
+Calculate a composite 'credibilityScore' (0-100).
+Determine 'classification' as one of: "REAL" (>= 72), "SUSPICIOUS" (45-71), or "FAKE" (< 45).
+Calculate 'confidence' (0-100).
+Generate a 'preciseAnalysis' which must be a detailed, nuanced 2-3 sentence paragraph explaining exactly why the article received its score, citing specific fallacies, biases, or facts verified.
+
+Return ONLY valid JSON exactly matching this structure (no markdown tags, no backticks, no explanations):
+{
+  "credibilityScore": 85,
+  "classification": "REAL",
+  "confidence": 92,
+  "preciseAnalysis": "A detailed 2-3 sentence explanation goes here.",
+  "breakdown": {
+    "sentiment": { "score": 80, "weight": 0.08, "label": "😊 Sentiment Analysis", "detail": "Balanced tone" },
+    "bias": { "score": 85, "weight": 0.12, "label": "⚖️ Bias Detection", "detail": "No significant bias" },
+    "subjectivity": { "score": 90, "weight": 0.10, "label": "📐 Objectivity", "detail": "Highly factual" },
+    "readability": { "score": 85, "weight": 0.08, "label": "📖 Readability", "detail": "Professional" },
+    "propaganda": { "score": 100, "weight": 0.20, "label": "🎭 Propaganda Check", "detail": "No propaganda techniques detected" },
+    "alignment": { "score": 90, "weight": 0.12, "label": "🔗 Headline Accuracy", "detail": "Headline accurately reflects content" },
+    "source": { "score": 88, "weight": 0.18, "label": "🏢 Source Credibility", "detail": "Recognized reputable source" },
+    "quality": { "score": 80, "weight": 0.12, "label": "📝 Content Quality", "detail": "Well-structured" }
+  },
+  "flags": [
+    { "type": "info", "message": "Example flag message" }
+  ]
+}`;
+
+    const result = await model.generateContent(prompt);
+    let responseText = result.response.text();
+    // Remove markdown code blocks if present
+    responseText = responseText.replace(/^\`\`\`json\s*/i, '').replace(/\`\`\`\s*$/, '').trim();
+    
+    const analysis = JSON.parse(responseText);
+    
+    // Safety check: ensure essential fields exist
+    if (!analysis.classification || typeof analysis.credibilityScore !== 'number') {
+      throw new Error("Invalid schema returned by Gemini");
+    }
+    
+    return analysis;
+  } catch (error) {
+    console.error("Gemini API Error, falling back to rule-based analysis:", error);
+    return analyzeArticleRuleBased(article);
+  }
 }

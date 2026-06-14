@@ -6,7 +6,7 @@ import StatsCard from '@/components/StatsCard';
 import NewsCard from '@/components/NewsCard';
 import AnalyzeForm from '@/components/AnalyzeForm';
 import { DistributionPieChart, CategoryBarChart, ScoreDistributionChart, SourceCredibilityChart, SentimentChart } from '@/components/Charts';
-
+import { computeStats } from '@/lib/stats';
 export default function Home() {
   const [articles, setArticles] = useState([]);
   const [stats, setStats] = useState(null);
@@ -16,6 +16,7 @@ export default function Home() {
   const [usingMockData, setUsingMockData] = useState(false);
   const [activeSources, setActiveSources] = useState([]);
   const [filterType, setFilterType] = useState('all');
+  const [selectedChannel, setSelectedChannel] = useState('All Sources');
 
   const fetchNews = useCallback(async (category) => {
     setLoading(true);
@@ -41,10 +42,40 @@ export default function Home() {
     fetchNews(activeCategory);
   }, [activeCategory, fetchNews]);
 
+  const handleAnalyzeArticle = async (articleIndex) => {
+    const articleToAnalyze = articles[articleIndex];
+    try {
+      const response = await fetch('/api/analyze-article', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(articleToAnalyze)
+      });
+      const data = await response.json();
+      
+      if (data.success && data.analysis) {
+        setArticles(prevArticles => {
+          const newArticles = [...prevArticles];
+          newArticles[articleIndex] = { ...newArticles[articleIndex], analysis: data.analysis };
+          setStats(computeStats(newArticles));
+          return newArticles;
+        });
+      }
+    } catch (err) {
+      console.error('Failed to analyze article:', err);
+    }
+  };
+
   const filteredArticles = articles.filter(article => {
     if (filterType === 'all') return true;
+    if (!article.analysis) return false;
     return article.analysis.classification === filterType.toUpperCase();
   });
+
+  const uniqueSources = ['All Sources', ...Array.from(new Set(articles.map(a => a.source))).filter(Boolean).sort()];
+  
+  const channelStats = selectedChannel !== 'All Sources' 
+    ? computeStats(articles.filter(a => a.source === selectedChannel && a.analysis)) 
+    : null;
 
   return (
     <>
@@ -88,7 +119,7 @@ export default function Home() {
             <p className="section-subtitle">Real-time analysis statistics across all monitored channels</p>
           </div>
 
-          {stats && (
+          {stats && stats.total > 0 ? (
             <div className="stats-grid">
               <StatsCard
                 icon="📰"
@@ -135,11 +166,16 @@ export default function Home() {
                 delay={750}
               />
             </div>
+          ) : (
+            <div className="empty-state" style={{ padding: '3rem', textAlign: 'center', background: 'rgba(26, 32, 68, 0.4)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+              <span className="empty-icon" style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem' }}>👆</span>
+              <p style={{ color: '#8892b0', fontSize: '1.1rem' }}>No articles analyzed yet. Click "Analyze Article" on any news card below to build your dashboard.</p>
+            </div>
           )}
         </section>
 
         {/* Charts Section */}
-        {stats && (
+        {stats && stats.total > 0 && (
           <section className="charts-section">
             <div className="section-header">
               <h2 className="section-title">
@@ -156,6 +192,55 @@ export default function Home() {
               <SentimentChart stats={stats} />
               <SourceCredibilityChart stats={stats} />
             </div>
+          </section>
+        )}
+
+        {/* Extra: Channel Analytics */}
+        {stats && stats.total > 0 && (
+          <section className="extra-channel-section" style={{ padding: '2rem 5%', background: 'rgba(20, 24, 48, 0.4)', marginTop: '2rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+            <div className="section-header" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h2 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent)' }}>
+                  <span>✨</span> Extra: Channel Insights
+                </h2>
+                <p className="section-subtitle" style={{ margin: 0, color: '#8892b0' }}>Deep dive into specific news channels</p>
+              </div>
+              <div className="channel-selector">
+                <select 
+                  value={selectedChannel} 
+                  onChange={(e) => setSelectedChannel(e.target.value)}
+                  style={{
+                    padding: '0.6rem 1rem',
+                    background: '#1a2044',
+                    color: '#fff',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    fontSize: '0.95rem',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {uniqueSources.map(src => (
+                    <option key={src} value={src}>{src}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {selectedChannel !== 'All Sources' && channelStats ? (
+              channelStats.total > 0 ? (
+                <div className="charts-grid" style={{ marginTop: '1.5rem' }}>
+                  <DistributionPieChart stats={channelStats} />
+                  <SentimentChart stats={channelStats} />
+                  <CategoryBarChart stats={channelStats} />
+                </div>
+              ) : (
+                <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', background: 'rgba(0, 0, 0, 0.2)', borderRadius: '12px' }}>
+                  <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>👀</span>
+                  <p style={{ color: '#8892b0', margin: 0 }}>No articles from {selectedChannel} have been analyzed yet.</p>
+                </div>
+              )
+            ) : null}
           </section>
         )}
 
@@ -198,19 +283,19 @@ export default function Home() {
               className={`filter-btn filter-real ${filterType === 'real' ? 'active' : ''}`}
               onClick={() => setFilterType('real')}
             >
-              ✓ Real ({articles.filter(a => a.analysis.classification === 'REAL').length})
+              ✓ Real ({articles.filter(a => a.analysis && a.analysis.classification === 'REAL').length})
             </button>
             <button
               className={`filter-btn filter-fake ${filterType === 'fake' ? 'active' : ''}`}
               onClick={() => setFilterType('fake')}
             >
-              ✗ Fake ({articles.filter(a => a.analysis.classification === 'FAKE').length})
+              ✗ Fake ({articles.filter(a => a.analysis && a.analysis.classification === 'FAKE').length})
             </button>
             <button
               className={`filter-btn filter-suspicious ${filterType === 'suspicious' ? 'active' : ''}`}
               onClick={() => setFilterType('suspicious')}
             >
-              ⚠ Suspicious ({articles.filter(a => a.analysis.classification === 'SUSPICIOUS').length})
+              ⚠ Suspicious ({articles.filter(a => a.analysis && a.analysis.classification === 'SUSPICIOUS').length})
             </button>
           </div>
 
@@ -218,16 +303,17 @@ export default function Home() {
           {loading && (
             <div className="loading-container">
               <div className="loading-spinner"></div>
-              <p>Analyzing news articles...</p>
+              <p>Fetching latest news articles...</p>
             </div>
           )}
 
           {/* Articles Grid */}
           {!loading && (
             <div className="news-grid">
-              {filteredArticles.map((article, index) => (
-                <NewsCard key={index} article={article} index={index} />
-              ))}
+              {filteredArticles.map((article, idx) => {
+                const originalIndex = articles.indexOf(article);
+                return <NewsCard key={originalIndex} article={article} index={idx} onAnalyze={() => handleAnalyzeArticle(originalIndex)} />
+              })}
               {filteredArticles.length === 0 && (
                 <div className="empty-state">
                   <span className="empty-icon">🔍</span>

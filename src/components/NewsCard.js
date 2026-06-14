@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 
-export default function NewsCard({ article, index }) {
+export default function NewsCard({ article, index, onAnalyze }) {
   const [expanded, setExpanded] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { analysis } = article;
 
   const getClassColor = (classification) => {
@@ -21,8 +22,8 @@ export default function NewsCard({ article, index }) {
     return '#ff1744';
   };
 
-  const classColor = getClassColor(analysis.classification);
-  const scoreColor = getScoreColor(analysis.credibilityScore);
+  const classColor = analysis ? getClassColor(analysis.classification) : '#444';
+  const scoreColor = analysis ? getScoreColor(analysis.credibilityScore) : '#444';
 
   const formatDate = (dateStr) => {
     try {
@@ -56,10 +57,11 @@ export default function NewsCard({ article, index }) {
           <span className="news-time">{formatDate(article.publishedAt)}</span>
         </div>
         <div className="news-card-badge" style={{ background: `${classColor}18`, color: classColor, borderColor: `${classColor}40` }}>
-          {analysis.classification === 'REAL' && '✓ '}
-          {analysis.classification === 'FAKE' && '✗ '}
-          {analysis.classification === 'SUSPICIOUS' && '⚠ '}
-          {analysis.classification}
+          {!analysis && 'UNANALYZED'}
+          {analysis?.classification === 'REAL' && '✓ '}
+          {analysis?.classification === 'FAKE' && '✗ '}
+          {analysis?.classification === 'SUSPICIOUS' && '⚠ '}
+          {analysis?.classification}
         </div>
       </div>
 
@@ -77,66 +79,109 @@ export default function NewsCard({ article, index }) {
         </div>
       )}
 
-      <div className="news-card-score-bar">
-        <div className="score-bar-header">
-          <span className="score-label">Credibility Score</span>
-          <span className="score-value" style={{ color: scoreColor }}>{analysis.credibilityScore}/100</span>
-        </div>
-        <div className="score-bar-track">
-          <div
-            className="score-bar-fill"
-            style={{
-              width: `${analysis.credibilityScore}%`,
-              background: `linear-gradient(90deg, ${scoreColor}88, ${scoreColor})`
-            }}
-          ></div>
-        </div>
-      </div>
+      {analysis && (
+        <>
+          <div className="news-card-score-bar">
+            <div className="score-bar-header">
+              <span className="score-label">Credibility Score</span>
+              <span className="score-value" style={{ color: scoreColor }}>{analysis.credibilityScore}/100</span>
+            </div>
+            <div className="score-bar-track">
+              <div
+                className="score-bar-fill"
+                style={{
+                  width: `${analysis.credibilityScore}%`,
+                  background: `linear-gradient(90deg, ${scoreColor}88, ${scoreColor})`
+                }}
+              ></div>
+            </div>
+          </div>
 
-      {/* Quick insight pills */}
-      <div className="insight-pills">
-        {analysis.breakdown.sentiment && (
-          <span className="insight-pill" title={`Sentiment: ${analysis.breakdown.sentiment.detail}`}>
-            {getSentimentEmoji(analysis.breakdown.sentiment.tone)} {analysis.breakdown.sentiment.tone || 'Neutral'}
-          </span>
-        )}
-        {analysis.breakdown.subjectivity && (
-          <span className="insight-pill" title={`Objectivity: ${analysis.breakdown.subjectivity.detail}`}>
-            📐 {analysis.breakdown.subjectivity.factRatio || 0}% Factual
-          </span>
-        )}
-        {analysis.breakdown.readability && (
-          <span className="insight-pill" title={`Readability: ${analysis.breakdown.readability.detail}`}>
-            📖 {analysis.breakdown.readability.level || 'N/A'}
-          </span>
-        )}
-        {analysis.breakdown.propaganda && analysis.breakdown.propaganda.techniques && analysis.breakdown.propaganda.techniques.length > 0 && (
-          <span className="insight-pill pill-warning" title={`Propaganda: ${analysis.breakdown.propaganda.detail}`}>
-            🎭 {analysis.breakdown.propaganda.techniques.length} flag{analysis.breakdown.propaganda.techniques.length > 1 ? 's' : ''}
-          </span>
-        )}
-      </div>
+          {/* Quick insight pills */}
+          <div className="insight-pills">
+            {analysis.breakdown.sentiment && (
+              <span className="insight-pill" title={`Sentiment: ${analysis.breakdown.sentiment.detail}`}>
+                {getSentimentEmoji(analysis.breakdown.sentiment.tone)} {analysis.breakdown.sentiment.tone || 'Neutral'}
+              </span>
+            )}
+            {analysis.breakdown.subjectivity && (
+              <span className="insight-pill" title={`Objectivity: ${analysis.breakdown.subjectivity.detail}`}>
+                📐 {analysis.breakdown.subjectivity.factRatio || 0}% Factual
+              </span>
+            )}
+            {analysis.breakdown.readability && (
+              <span className="insight-pill" title={`Readability: ${analysis.breakdown.readability.detail}`}>
+                📖 {analysis.breakdown.readability.level || 'N/A'}
+              </span>
+            )}
+            {analysis.breakdown.propaganda && analysis.breakdown.propaganda.techniques && analysis.breakdown.propaganda.techniques.length > 0 && (
+              <span className="insight-pill pill-warning" title={`Propaganda: ${analysis.breakdown.propaganda.detail}`}>
+                🎭 {analysis.breakdown.propaganda.techniques.length} flag{analysis.breakdown.propaganda.techniques.length > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
 
-      {analysis.flags && analysis.flags.length > 0 && (
-        <div className="news-card-flags">
-          {analysis.flags.slice(0, 3).map((flag, i) => (
-            <span key={i} className={`flag flag-${flag.type}`}>
-              {flag.type === 'danger' && '🚨'}
-              {flag.type === 'warning' && '⚠️'}
-              {flag.type === 'info' && 'ℹ️'}
-              {' '}{flag.message}
-            </span>
-          ))}
-        </div>
+          {analysis.flags && analysis.flags.length > 0 && (
+            <div className="news-card-flags">
+              {analysis.flags.slice(0, 3).map((flag, i) => (
+                <span key={i} className={`flag flag-${flag.type}`}>
+                  {flag.type === 'danger' && '🚨'}
+                  {flag.type === 'warning' && '⚠️'}
+                  {flag.type === 'info' && 'ℹ️'}
+                  {' '}{flag.message}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
+            <button className="expand-btn" onClick={() => setExpanded(!expanded)} style={{ margin: 0 }}>
+              {expanded ? 'Hide Details' : 'View Full Analysis'} 
+              <span className={`expand-arrow ${expanded ? 'up' : ''}`}>▾</span>
+            </button>
+            
+            {!analysis.isAdvanced && (
+              <button 
+                className="analyze-btn primary-btn" 
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  setIsAnalyzing(true);
+                  if (onAnalyze) await onAnalyze();
+                  setIsAnalyzing(false);
+                }}
+                disabled={isAnalyzing}
+                style={{ 
+                  padding: '0.4rem 1rem', 
+                  borderRadius: '6px', 
+                  background: isAnalyzing ? '#444' : 'linear-gradient(90deg, var(--accent), #7b2ff7)', 
+                  color: '#fff', 
+                  border: 'none', 
+                  cursor: isAnalyzing ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
+                  fontSize: '0.85rem'
+                }}
+              >
+                {isAnalyzing ? 'Analyzing...' : '✨ Advanced AI Analysis'}
+              </button>
+            )}
+          </div>
+        </>
       )}
 
-      <button className="expand-btn" onClick={() => setExpanded(!expanded)}>
-        {expanded ? 'Hide Details' : 'View Full Analysis'} 
-        <span className={`expand-arrow ${expanded ? 'up' : ''}`}>▾</span>
-      </button>
-
-      {expanded && (
+      {expanded && analysis && (
         <div className="news-card-details">
+          {/* Extra: Precise AI Analysis */}
+          {analysis.preciseAnalysis && (
+            <div className="precise-analysis-container" style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(123, 47, 247, 0.1)', borderRadius: '8px', borderLeft: '4px solid var(--accent)' }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span>✨</span> Extra: Precise AI Analysis
+              </h4>
+              <p style={{ margin: 0, color: '#e2e8f0', lineHeight: '1.6', fontSize: '0.95rem' }}>
+                {analysis.preciseAnalysis}
+              </p>
+            </div>
+          )}
+
           <h4>8-Dimension Analysis</h4>
           <div className="breakdown-grid">
             {Object.entries(analysis.breakdown).map(([key, item]) => (
